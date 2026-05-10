@@ -6,6 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+import json
+import re
+
 def extract_user_intent(message: str):
     response = client.chat.completions.create(
         model="llama-3.1-8b-instant",
@@ -13,13 +16,13 @@ def extract_user_intent(message: str):
             {
                 "role": "system",
                 "content": """
-                Return ONLY JSON in this format:
+                Return ONLY valid JSON in this exact format, no markdown, no explanation:
                 {
-                "intent": "string",
-                "filters": {
-                    "time_range": "this_month | last_month | all_time",
-                    "category": "string or null"
-                }
+                    "intent": "string",
+                    "filters": {
+                        "time_range": "this_month | last_month | all_time",
+                        "category": "string or null"
+                    }
                 }
                 """
             },
@@ -27,7 +30,15 @@ def extract_user_intent(message: str):
         ]
     )
 
-    return json.loads(response.choices[0].message.content)
+    raw = response.choices[0].message.content or ""
+    
+    # Strip markdown code fences if present
+    raw = re.sub(r"```(?:json)?\s*|\s*```", "", raw).strip()
+
+    if not raw:
+        raise ValueError("LLM returned empty response")
+
+    return json.loads(raw)
 
 
 def generate_explanation(user_message: str, breakdown: dict):
